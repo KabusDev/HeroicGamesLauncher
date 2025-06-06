@@ -576,7 +576,7 @@ export async function forceUninstall(appName: string) {
 
 export async function stop(appName: string, stopWine = true) {
   const pattern = isLinux ? appName : 'nile'
-  killPattern(pattern)
+  await killPattern(pattern)
 
   if (stopWine && !isNative()) {
     const gameSettings = await getSettings(appName)

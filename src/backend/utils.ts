@@ -90,6 +90,10 @@ import {
   windowIcon
 } from './constants/paths'
 import { parse } from '@node-steam/vdf'
+import regedit from 'regedit'
+import { getProcessTree } from 'windows-process-tree'
+import { kernel32 } from 'win32-api'
+import { PROCESS_TERMINATE } from 'win32-api/constants'
 
 const execAsync = promisify(exec)
 
@@ -262,13 +266,13 @@ async function handleExit() {
     // This is very hacky and can be removed if gogdl
     // and legendary handle SIGTERM and SIGKILL
     const possibleChildren = ['legendary', 'gogdl']
-    possibleChildren.forEach((procName) => {
+    for (const procName of possibleChildren) {
       try {
-        killPattern(procName)
+        await killPattern(procName)
       } catch (error) {
         logInfo([`Unable to kill ${procName}, ignoring.`, error])
       }
-    })
+    }
 
     // Kill all child processes
     callAllAbortControllers()
@@ -705,50 +709,35 @@ function detectVCRedist(mainWindow: BrowserWindow) {
   // https://xkln.net/blog/please-stop-using-win32product-to-find-installed-software-alternatives-inside/
   // wmic is also deprecated
   const detectedVCRInstallations: string[] = []
-  let stderr = ''
+  try {
+    const uninstallPaths = [
+      'HKLM\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall',
+      'HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall'
+    ]
 
-  // get applications
-  const child = spawn('powershell.exe', [
-    'Get-ItemProperty',
-    'HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*,',
-    'HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*',
-    '|',
-    'Select-Object',
-    'DisplayName',
-    '|',
-    'Format-Table',
-    '-AutoSize'
-  ])
+    for (const root of uninstallPaths) {
+      const rootData = await new Promise<regedit.ListResult>((resolve, reject) => {
+        regedit.list(root, (err, res) => (err ? reject(err) : resolve(res)))
+      })
 
-  child.stdout.setEncoding('utf-8')
-  child.stdout.on('data', (data: string) => {
-    const splitData = data.split('\n')
-    for (const installation of splitData) {
-      if (installation && installation.includes('Microsoft Visual C++ 2022')) {
-        detectedVCRInstallations.push(installation)
+      for (const key of rootData[root].keys) {
+        const sub = `${root}\\${key}`
+        const subData = await new Promise<regedit.ListResult>((resolve, reject) => {
+          regedit.list(sub, (err, res) => (err ? reject(err) : resolve(res)))
+        })
+        const display = subData[sub].values['DisplayName']?.value as string | undefined
+        if (display && display.includes('Microsoft Visual C++ 2022')) {
+          detectedVCRInstallations.push(display)
+        }
       }
     }
-  })
-
-  child.stderr.setEncoding('utf-8')
-  child.stderr.on('data', (data: string) => {
-    stderr += data
-  })
-
-  child.on('error', (error: Error) => {
+  } catch (error) {
     logError(['Check of VCRuntime crashed with:', error], LogPrefix.Backend)
     return
-  })
+  }
 
-  child.on('close', async (code: number) => {
-    if (code) {
-      logError(
-        `Failed to check for VCRuntime installations\n${stderr}`,
-        LogPrefix.Backend
-      )
-      return
-    }
-    // VCR installers install both the "Minimal" and "Additional" runtime, and we have 2 installers (x86 and x64) -> 4 installations in total
+  // VCR installers install both the "Minimal" and "Additional" runtime, and we have 2 installers (x86 and x64) -> 4 installations in total
+  ;(async () => {
     if (detectedVCRInstallations.length < 4) {
       const { response } = await dialog.showMessageBox(mainWindow, {
         title: t('box.vcruntime.notfound.title', 'VCRuntime not installed'),
@@ -780,7 +769,7 @@ function detectVCRedist(mainWindow: BrowserWindow) {
     } else {
       logInfo('VCRuntime is installed', LogPrefix.Backend)
     }
-  })
+  })()
 }
 
 const getLatestReleases = async (): Promise<Release[]> => {
@@ -858,18 +847,34 @@ function getInfo(appName: string, runner: Runner): GameInfo {
 
 // can be removed if legendary and gogdl handle SIGTERM and SIGKILL
 // for us
-function killPattern(pattern: string) {
+async function killPattern(pattern: string) {
   logInfo(['Trying to kill', pattern], LogPrefix.Backend)
-  let ret
   if (isWindows) {
-    ret = spawnSync('Stop-Process', ['-name', pattern], {
-      shell: 'powershell.exe'
+    await new Promise<void>((resolve) => {
+      getProcessTree(0, (tree) => {
+        const procs: number[] = []
+        function walk(n: any) {
+          if (n.name.toLowerCase().includes(pattern.toLowerCase())) {
+            procs.push(n.pid)
+          }
+          n.children?.forEach(walk)
+        }
+        if (tree) walk(tree)
+        for (const pid of procs) {
+          const handle = kernel32.OpenProcess(PROCESS_TERMINATE, 0, pid)
+          if (handle) {
+            kernel32.TerminateProcess(handle, 0)
+            kernel32.CloseHandle(handle)
+          }
+        }
+        resolve()
+      })
     })
-  } else {
-    ret = spawnSync('pkill', ['-f', pattern])
+    logInfo(['Killed', pattern], LogPrefix.Backend)
+    return
   }
+  spawnSync('pkill', ['-f', pattern])
   logInfo(['Killed', pattern], LogPrefix.Backend)
-  return ret
 }
 
 async function shutdownWine(gameSettings: GameSettings) {

@@ -1342,8 +1342,6 @@ interface RunnerProps {
 
 const commandsRunning: Record<string, Promise<ExecResult>> = {}
 
-let shouldUsePowerShell: boolean | null = null
-
 function appNameFromCommandParts(commandParts: string[], runner: Runner) {
   let appNameIndex = -1
   let idx = -1
@@ -1405,28 +1403,7 @@ async function callRunner(
   // requires a "./"
   if (!isWindows) bin = './' + bin
 
-  // On Windows: Use PowerShell's `Start-Process` to wait for the process and
-  // its children to exit, provided PowerShell is available
-  if (shouldUsePowerShell === null)
-    shouldUsePowerShell =
-      isWindows && !!(await searchForExecutableOnPath('powershell'))
-
-  if (shouldUsePowerShell) {
-    const argsAsString = commandParts
-      .map((part) => part.replaceAll('\\', '\\\\'))
-      .map((part) => `"\`"${part}\`""`)
-      .join(',')
-    commandParts = [
-      '-NoProfile',
-      'Start-Process',
-      `"\`"${fullRunnerPath}\`""`,
-      '-Wait',
-      '-NoNewWindow'
-    ]
-    if (argsAsString) commandParts.push('-ArgumentList', argsAsString)
-
-    bin = fullRunnerPath = 'powershell'
-  }
+  // Previously used PowerShell to spawn commands on Windows; now use direct process spawn
 
   const safeCommand = getRunnerCallWithoutCredentials(
     [...commandParts],

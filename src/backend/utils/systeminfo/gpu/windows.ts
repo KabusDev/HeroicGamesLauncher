@@ -1,45 +1,14 @@
-import { z } from 'zod'
-
-import { genericSpawnWrapper } from '../../os/processes'
+import si from 'systeminformation'
 
 import type { PartialGpuInfo } from './index'
 
-const Win32_VideoController = z.object({
-  AdapterCompatibility: z.string(),
-  DriverVersion: z.string(),
-  PnPDeviceID: z.string()
-})
-type VideoController = z.infer<typeof Win32_VideoController>
-
 async function getGpuInfo_windows(): Promise<PartialGpuInfo[]> {
-  // Unlike on Linux, Electron's `app.getGPUInfo` seems entirely useless on
-  // Windows (returns wrong device & vendor IDs). We instead use WMI to find
-  // those values
-  const { stdout } = await genericSpawnWrapper('powershell', [
-    'Get-CimInstance',
-    '-Class',
-    'Win32_VideoController',
-    '-Property',
-    'AdapterCompatibility,DriverVersion,PnPDeviceID',
-    '|',
-    'Select-Object',
-    'AdapterCompatibility,DriverVersion,PnPDeviceID',
-    '|',
-    'ConvertTo-Json',
-    '-Compress'
-  ])
-  let videoControllers: VideoController[]
-  try {
-    // This is a single object if the user is using one GPU, or an array if they
-    // have multiple
-    const parsed = Win32_VideoController.or(
-      Win32_VideoController.array()
-    ).parse(JSON.parse(stdout))
-    if (Array.isArray(parsed)) videoControllers = parsed
-    else videoControllers = [parsed]
-  } catch {
-    return []
-  }
+  const info = await si.graphics()
+  const videoControllers = info.controllers.map((c) => ({
+    AdapterCompatibility: c.vendor || '',
+    DriverVersion: c.driverVersion || '',
+    PnPDeviceID: c.pnpDeviceId || ''
+  }))
 
   const gpus: PartialGpuInfo[] = []
   for (const gpu of videoControllers) {

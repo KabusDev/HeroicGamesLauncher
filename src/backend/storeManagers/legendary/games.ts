@@ -1053,7 +1053,7 @@ export async function stop(appName: string, stopWine = true) {
 
   // @adityaruplaha: this is kinda arbitary and I don't understand it.
   const pattern = isLinux ? appName : 'legendary'
-  killPattern(pattern)
+  await killPattern(pattern)
 
   if (stopWine && !isNative(appName)) {
     const gameSettings = await getSettings(appName)
