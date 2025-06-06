@@ -1,10 +1,10 @@
 
 import type { Path } from 'backend/schemas'
-import { GetNamedSecurityInfoW, SE_OBJECT_TYPE, DACL_SECURITY_INFORMATION } from 'win32-api'
+import { access, constants } from 'fs/promises'
 import si from 'systeminformation'
 import type { DiskInfo } from './index'
 
-// TODO: implement parseSecurityDescriptor to properly enumerate ACL entries
+// TODO: use win32 APIs to parse ACLs for finer-grained checks
 
 async function getDiskInfo_windows(path: Path): Promise<DiskInfo> {
   const disks = await si.fsSize()
@@ -19,23 +19,12 @@ async function getDiskInfo_windows(path: Path): Promise<DiskInfo> {
 }
 
 async function isWritable_windows(path: Path): Promise<boolean> {
-  return new Promise<boolean>((resolve) => {
-    // Replaced Get-Acl with win32-api GetNamedSecurityInfoW
-    GetNamedSecurityInfoW(
-      path,
-      SE_OBJECT_TYPE.SE_FILE_OBJECT,
-      DACL_SECURITY_INFORMATION,
-      null,
-      null,
-      null,
-      null,
-      (err, pSD) => {
-        if (err !== 0) return resolve(false)
-        // TODO: implement parseSecurityDescriptor to check FileSystemRights.Modify
-        resolve(true)
-      }
-    )
-  })
+  try {
+    await access(path, constants.W_OK)
+    return true
+  } catch {
+    return false
+  }
 }
 
 export { getDiskInfo_windows, isWritable_windows }

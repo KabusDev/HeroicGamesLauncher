@@ -7,7 +7,7 @@ async function getGpuInfo_windows(): Promise<PartialGpuInfo[]> {
   const videoControllers = info.controllers.map((c) => ({
     AdapterCompatibility: c.vendor || '',
     DriverVersion: c.driverVersion || '',
-    PnPDeviceID: c.pnpDeviceId || ''
+    PnPDeviceID: (c as any).pnpDeviceId || ''
   }))
 
   const gpus: PartialGpuInfo[] = []

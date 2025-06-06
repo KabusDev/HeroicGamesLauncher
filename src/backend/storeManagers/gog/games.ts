@@ -78,7 +78,7 @@ import {
 import setup from './setup'
 import { removeNonSteamGame } from '../../shortcuts/nonesteamgame/nonesteamgame'
 import shlex from 'shlex'
-import sudoPrompt from 'sudo-prompt'
+import * as sudoPrompt from 'sudo-prompt'
 import {
   GOGCloudSavesLocation,
   GOGSessionSyncQueueItem,

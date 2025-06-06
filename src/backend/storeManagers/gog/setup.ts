@@ -19,7 +19,7 @@ import {
 } from 'common/types/gog'
 import { gogdlConfigPath, gogRedistPath, gogSupportPath } from './constants'
 import { isWindows } from 'backend/constants/environment'
-import sudoPrompt from 'sudo-prompt'
+import * as sudoPrompt from 'sudo-prompt'
 
 /*
  * Automatially executes command properly according to operating system

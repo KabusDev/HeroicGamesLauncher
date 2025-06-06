@@ -90,10 +90,8 @@ import {
   windowIcon
 } from './constants/paths'
 import { parse } from '@node-steam/vdf'
-import regedit from 'regedit'
+import * as regedit from 'regedit'
 import { getProcessTree } from 'windows-process-tree'
-import { kernel32 } from 'win32-api'
-import { PROCESS_TERMINATE } from 'win32-api/constants'
 
 const execAsync = promisify(exec)
 
@@ -694,7 +692,7 @@ function removeQuoteIfNecessary(stringToUnquote: string) {
  *
  * Only works on Windows of course
  */
-function detectVCRedist(mainWindow: BrowserWindow) {
+async function detectVCRedist(mainWindow: BrowserWindow) {
   if (!isWindows) {
     return
   }
@@ -717,13 +715,17 @@ function detectVCRedist(mainWindow: BrowserWindow) {
 
     for (const root of uninstallPaths) {
       const rootData = await new Promise<regedit.ListResult>((resolve, reject) => {
-        regedit.list(root, (err, res) => (err ? reject(err) : resolve(res)))
+        regedit.list(root, (err: Error | null, res: regedit.ListResult) =>
+          err ? reject(err) : resolve(res)
+        )
       })
 
       for (const key of rootData[root].keys) {
         const sub = `${root}\\${key}`
         const subData = await new Promise<regedit.ListResult>((resolve, reject) => {
-          regedit.list(sub, (err, res) => (err ? reject(err) : resolve(res)))
+          regedit.list(sub, (err: Error | null, res: regedit.ListResult) =>
+            err ? reject(err) : resolve(res)
+          )
         })
         const display = subData[sub].values['DisplayName']?.value as string | undefined
         if (display && display.includes('Microsoft Visual C++ 2022')) {
@@ -737,9 +739,8 @@ function detectVCRedist(mainWindow: BrowserWindow) {
   }
 
   // VCR installers install both the "Minimal" and "Additional" runtime, and we have 2 installers (x86 and x64) -> 4 installations in total
-  ;(async () => {
-    if (detectedVCRInstallations.length < 4) {
-      const { response } = await dialog.showMessageBox(mainWindow, {
+  if (detectedVCRInstallations.length < 4) {
+    const { response } = await dialog.showMessageBox(mainWindow, {
         title: t('box.vcruntime.notfound.title', 'VCRuntime not installed'),
         message: t(
           'box.vcruntime.notfound.message',
@@ -752,24 +753,23 @@ function detectVCRedist(mainWindow: BrowserWindow) {
         ]
       })
 
-      if (response === 2) {
-        return configStore.set('skipVcRuntime', true)
-      }
-
-      if (response === 0) {
-        openUrlOrFile('https://aka.ms/vs/17/release/vc_redist.x86.exe')
-        openUrlOrFile('https://aka.ms/vs/17/release/vc_redist.x64.exe')
-        dialog.showMessageBox(mainWindow, {
-          message: t(
-            'box.vcruntime.install.message',
-            'The download links for the Visual C++ Runtimes have been opened. Please install both the x86 and x64 versions.'
-          )
-        })
-      }
-    } else {
-      logInfo('VCRuntime is installed', LogPrefix.Backend)
+    if (response === 2) {
+      return configStore.set('skipVcRuntime', true)
     }
-  })()
+
+    if (response === 0) {
+      openUrlOrFile('https://aka.ms/vs/17/release/vc_redist.x86.exe')
+      openUrlOrFile('https://aka.ms/vs/17/release/vc_redist.x64.exe')
+      dialog.showMessageBox(mainWindow, {
+        message: t(
+          'box.vcruntime.install.message',
+          'The download links for the Visual C++ Runtimes have been opened. Please install both the x86 and x64 versions.'
+        )
+      })
+    }
+  } else {
+    logInfo('VCRuntime is installed', LogPrefix.Backend)
+  }
 }
 
 const getLatestReleases = async (): Promise<Release[]> => {
@@ -861,10 +861,10 @@ async function killPattern(pattern: string) {
         }
         if (tree) walk(tree)
         for (const pid of procs) {
-          const handle = kernel32.OpenProcess(PROCESS_TERMINATE, 0, pid)
-          if (handle) {
-            kernel32.TerminateProcess(handle, 0)
-            kernel32.CloseHandle(handle)
+          try {
+            process.kill(pid)
+          } catch {
+            // ignore errors if process already exited
           }
         }
         resolve()

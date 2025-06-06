@@ -238,7 +238,7 @@ async function initializeWindow(): Promise<BrowserWindow> {
     handleExit()
   })
 
-  detectVCRedist(mainWindow)
+  await detectVCRedist(mainWindow)
 
   if (process.env.ELECTRON_RENDERER_URL) {
     mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
