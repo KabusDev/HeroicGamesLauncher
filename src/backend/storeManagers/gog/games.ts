@@ -78,6 +78,7 @@ import {
 import setup from './setup'
 import { removeNonSteamGame } from '../../shortcuts/nonesteamgame/nonesteamgame'
 import shlex from 'shlex'
+import * as sudoPrompt from 'sudo-prompt'
 import {
   GOGCloudSavesLocation,
   GOGSessionSyncQueueItem,
@@ -944,11 +945,13 @@ export async function uninstall({
         '-ArgumentList'
       ]
 
-      await spawnAsync('powershell', [
-        ...adminCommand,
-        `"/verysilent","\`"/dir=${installDirectory}\`""`,
-        ``
-      ])
+      await new Promise<void>((resolve, reject) => {
+        const cmd = `"${uninstallerPath}" /verysilent "/dir=${installDirectory}"`
+        sudoPrompt.exec(cmd, { name: 'Heroic Uninstall' }, (err) => {
+          if (err) return reject(err)
+          resolve()
+        })
+      })
     }
   }
   if (existsSync(object.install_path)) {
@@ -1040,24 +1043,13 @@ export async function update(
           // Run uninstall on DLC
           const uninstallExeFile = uninstallerFile.replace('ini', 'exe')
           if (isWindows) {
-            const adminCommand = [
-              '-NoProfile',
-              'Start-Process',
-              '-FilePath',
-              uninstallExeFile,
-              '-Verb',
-              'RunAs',
-              '-Wait',
-              '-ArgumentList'
-            ]
-            await spawnAsync(
-              'powershell',
-              [
-                ...adminCommand,
-                `"/ProductId=${productId}","/VERYSILENT","/galaxyclient","/KEEPSAVES"`
-              ],
-              { cwd: gameData.install.install_path }
-            )
+            await new Promise<void>((resolve, reject) => {
+              const cmd = `"${uninstallExeFile}" /ProductId=${productId} /VERYSILENT /galaxyclient /KEEPSAVES`
+              sudoPrompt.exec(cmd, { name: 'Heroic Uninstall' }, (err) => {
+                if (err) return reject(err)
+                resolve()
+              })
+            })
           } else {
             await runWineCommand({
               gameSettings: gameConfig,

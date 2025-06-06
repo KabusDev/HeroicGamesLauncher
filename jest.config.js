@@ -16,6 +16,9 @@ module.exports = {
     '<rootDir>/coverage'
   ],
   coverageReporters: ['text', 'html'],
+  moduleNameMapper: {
+    '^windows-process-tree$': '<rootDir>/src/backend/__mocks__/windows-process-tree.ts'
+  },
   projects: ['<rootDir>/src/backend'],
 
   rootDir: '.'

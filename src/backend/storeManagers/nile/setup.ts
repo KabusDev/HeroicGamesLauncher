@@ -93,19 +93,8 @@ export default async function setup(
     const exeArguments = action.Args ?? []
 
     if (isWindows) {
-      const command = [
-        '-NoProfile',
-        'Start-Process',
-        '-FilePath',
-        action.Command
-      ]
-      if (exeArguments.length) {
-        command.push('-ArgumentList', ...exeArguments)
-      }
-      logInfo(['Setup: Executing', command.join(' ')], LogPrefix.Nile)
-      await spawnAsync('powershell', command, {
-        cwd: basePath
-      })
+      logInfo(['Setup: Executing', [action.Command, ...exeArguments].join(' ')], LogPrefix.Nile)
+      await spawnAsync(action.Command, exeArguments, { cwd: basePath })
       continue
     }
 

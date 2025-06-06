@@ -19,6 +19,7 @@ import {
 } from 'common/types/gog'
 import { gogdlConfigPath, gogRedistPath, gogSupportPath } from './constants'
 import { isWindows } from 'backend/constants/environment'
+import * as sudoPrompt from 'sudo-prompt'
 
 /*
  * Automatially executes command properly according to operating system
@@ -26,34 +27,14 @@ import { isWindows } from 'backend/constants/environment'
  */
 async function runSetupCommand(wineArgs: WineCommandArgs) {
   if (isWindows) {
-    // Run shell
     const [exe, ...args] = wineArgs.commandParts
-    return spawnAsync(
-      'powershell',
-      [
-        '-NoProfile',
-        'Start-Process',
-        '-FilePath',
-        exe,
-        '-Verb',
-        'RunAs',
-        '-Wait',
-        '-ArgumentList',
-        // TODO: Verify how Powershell will handle those
-        args
-          .map((argument) => {
-            if (argument.includes(' ')) {
-              // Add super quotes:tm:
-              argument = '`"' + argument + '`"'
-            }
-            // Add normal quotes
-            argument = '"' + argument + '"'
-            return argument
-          })
-          .join(',')
-      ],
-      { cwd: wineArgs.startFolder }
-    )
+    return new Promise<void>((resolve, reject) => {
+      const cmd = `"${exe}" ${args.map((a) => (a.includes(' ') ? `\"${a}\"` : a)).join(' ')}`
+      sudoPrompt.exec(cmd, { name: 'Heroic Setup' }, (err) => {
+        if (err) return reject(err)
+        resolve()
+      })
+    })
   } else {
     return runWineCommand(wineArgs)
   }
